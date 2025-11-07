@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server';
 import Replicate from 'replicate';
 import { supabase } from '@/lib/supabaseClient';
 
+// (A IMPORTAÇÃO DO 'auth' FOI REMOVIDA)
+
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN!,
 });
 
 export async function POST(request: Request) {
-  // (AUTENTICAÇÃO REMOVIDA TEMPORARIAMENTE PARA CORRIGIR A BUILD)
+  // (AUTENTICAÇÃO REMOVIDA TEMPORARIAMENTE PARA CORRIGIR A BUILD/CRASH)
   // const { userId } = await auth();
   // if (!userId) { ... }
 
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
 
     if (dbError) console.error("Erro ao guardar o job:", dbError);
 
-    return NextResponse.json({ job_id: prediction.id }, { status: 201 });
+    return NextResponse.json({ job_id: prediction.id }, { status: 201 }); // 201 = Criado
 
   } catch (error) {
     console.error("Erro ao chamar o Replicate:", error);
