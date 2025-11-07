@@ -1,6 +1,10 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
 
-export default clerkMiddleware();
+export default clerkMiddleware({
+  // Dizer ao Clerk que esta rota é PÚBLICA e não precisa de login
+  // Isto permite que o Replicate nos envie a foto restaurada
+  publicRoutes: ["/api/webhook"]
+});
 
 export const config = {
   matcher: [
