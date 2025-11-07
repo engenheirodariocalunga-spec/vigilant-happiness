@@ -2,13 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-import {
-  ClerkProvider,
-  SignInButton,
-  SignedIn,
-  SignedOut,
-  UserButton
-} from '@clerk/nextjs';
+// TODAS AS IMPORTAÇÕES DO CLERK FORAM REMOVIDAS
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,28 +17,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={inter.className}>
+    // O <ClerkProvider> FOI REMOVIDO
+    <html lang="en">
+      <body className={inter.className}>
 
-          <header style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem' }}>
-            <p>EternaPic</p>
-            <div>
-              <SignedOut>
-                <SignInButton />
-              </SignedOut>
-              <SignedIn>
-                <UserButton />
-              </SignedIn>
-            </div>
-          </header>
+        {/* O CABEÇALHO DE LOGIN FOI REMOVIDO */}
 
-          <main>
-            {children}
-          </main>
+        <main>
+          {children}
+        </main>
 
-        </body>
-      </html>
-    </ClerkProvider>
+      </body>
+    </html>
   );
 }
