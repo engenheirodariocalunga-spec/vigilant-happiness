@@ -1,7 +1,8 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { authMiddleware } from "@clerk/nextjs/server";
 
-export default clerkMiddleware({
-  // Dizer ao Clerk que esta rota é PÚBLICA e não precisa de login
+// Esta é a função correta!
+export default authMiddleware({
+  // Dizer ao "guarda" que esta rota é PÚBLICA e não precisa de login
   // Isto permite que o Replicate nos envie a foto restaurada
   publicRoutes: ["/api/webhook"]
 });
