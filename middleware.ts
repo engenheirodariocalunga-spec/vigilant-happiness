@@ -1,5 +1,4 @@
-import { authMiddleware } from "@clerk/nextjs/server";
-
+import { authMiddleware } from "@clerk/nextjs"; // <-- CORRETO
 // Esta é a função correta!
 export default authMiddleware({
   // Dizer ao "guarda" que esta rota é PÚBLICA e não precisa de login
