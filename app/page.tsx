@@ -1,28 +1,72 @@
-// PASSO 1: Converter para um Componente de Cliente
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Importamos o useEffect
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Importar o nosso cliente Supabase
 import { supabase } from "@/lib/supabaseClient";
-// Importar o hook de utilizador do Clerk para sabermos quem está logado
 import { useUser } from "@clerk/nextjs";
 
-export default function HomePage() {
-  // PASSO 2: Criar "estado" para guardar os nossos dados
-  const { user } = useUser(); // Obter o utilizador logado
+// Interface para o nosso Job (boa prática)
+interface Job {
+  id: number;
+  replicate_id: string;
+  status: string;
+  output_image_url: string | null;
+  // Adicione outros campos se necessário
+}
 
-  // Estado para o "Restaurar"
+export default function HomePage() {
+  const { user } = useUser();
+
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
-  const [restoreStatus, setRestoreStatus] = useState<string>(""); // Ex: "A carregar...", "A restaurar..."
+  const [restoreStatus, setRestoreStatus] = useState<string>("");
   const [restoreResult, setRestoreResult] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // Função para o "Restaurar Foto"
+  // O ID do pedido que estamos a "ouvir"
+  const [listeningJobId, setListeningJobId] = useState<string | null>(null);
+
+  // PASSO 5 (A MAGIA): "Ouvir" o Supabase em Tempo Real
+  useEffect(() => {
+    // Se não houver utilizador ou nenhum pedido para ouvir, não faz nada
+    if (!user || !listeningJobId) {
+      return;
+    }
+
+    // O Supabase Realtime!
+    const channel = supabase
+      .channel(`jobs-feed:${user.id}`) // Um canal único por utilizador
+      .on(
+        'postgres_changes',
+        { 
+          event: 'UPDATE', // Ouvir apenas por "UPDATEs"
+          schema: 'public',
+          table: 'jobs', // Na nossa tabela 'jobs'
+          filter: `replicate_id=eq.${listeningJobId}` // E só para o *nosso* pedido
+        },
+        (payload) => {
+          // Quando o webhook atualiza o nosso job, isto é acionado!
+          const updatedJob = payload.new as Job;
+          if (updatedJob.status === 'completed') {
+            setRestoreResult(updatedJob.output_image_url);
+            setRestoreStatus("Foto restaurada com sucesso!");
+            setListeningJobId(null); // Parar de ouvir
+            channel.unsubscribe(); // Desligar o canal
+          }
+        }
+      )
+      .subscribe();
+
+    // Função de "limpeza"
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [listeningJobId, user]); // Correr este efeito sempre que o listeningJobId mudar
+
+  // Função de Submissão (Agora Assíncrona)
   const handleRestoreSubmit = async () => {
     if (!restoreFile) {
       setRestoreError("Por favor, selecione um ficheiro.");
@@ -38,30 +82,25 @@ export default function HomePage() {
     setRestoreResult(null);
 
     try {
-      // PASSO 3: Fazer upload para o Supabase
-      // Criar um nome de ficheiro único para evitar conflitos
+      // 1. Upload para o Supabase (igual a antes)
       const fileName = `${user.id}/${new Date().toISOString()}`;
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("eternapic-images") // O nome do nosso "balde" (vamos criar a seguir)
+      const { error: uploadError } = await supabase.storage
+        .from("eternapic-images")
         .upload(fileName, restoreFile);
-
       if (uploadError) throw uploadError;
 
-      // Obter o URL público do ficheiro que acabámos de carregar
       const { data: publicUrlData } = supabase.storage
         .from("eternapic-images")
         .getPublicUrl(fileName);
-
       const imageUrl = publicUrlData.publicUrl;
 
-      // PASSO 4: Chamar o nosso Backend (a API que criámos)
-      setRestoreStatus("A restaurar a imagem... (Isto pode levar 1 min)");
+      // 2. Chamar a nossa API (agora devolve um job_id)
+      setRestoreStatus("A registar o pedido de IA...");
 
       const response = await fetch("/api/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: imageUrl }), // Enviar o URL do Supabase
+        body: JSON.stringify({ imageUrl: imageUrl }),
       });
 
       if (!response.ok) {
@@ -69,11 +108,11 @@ export default function HomePage() {
         throw new Error(errorData.error || "A restauração falhou.");
       }
 
-      const data = await response.json();
+      const data = await response.json(); // Agora contém { job_id: "..." }
 
-      // PASSO 5: Mostrar o resultado
-      setRestoreResult(data.restoredImageUrl[0]); // A API devolve uma lista
-      setRestoreStatus("Foto restaurada com sucesso!");
+      // 3. ATIVAR A "ESCUTA"
+      setListeningJobId(data.job_id); // Guardar o ID do pedido
+      setRestoreStatus("Pedido enviado. A aguardar a IA... (Isto pode levar 1 min)");
 
     } catch (err: any) {
       console.error(err);
@@ -91,7 +130,6 @@ export default function HomePage() {
         </TabsList>
 
         <TabsContent value="eternapic">
-          {/* A LÓGICA DO ETERNAPIC (FUSÃO) VIRÁ AQUI MAIS TARDE */}
           <Card>
             <CardHeader>
               <CardTitle>EternaPic - Criador de Memórias</CardTitle>
@@ -122,9 +160,9 @@ export default function HomePage() {
               <Button 
                 className="w-full" 
                 onClick={handleRestoreSubmit}
-                disabled={restoreStatus.includes("A carregar...") || restoreStatus.includes("A restaurar...")}
+                disabled={restoreStatus.includes("A") || restoreStatus.includes("enviado")}
               >
-                {restoreStatus.includes("A") ? restoreStatus : "Restaurar Foto (Custa 1 Crédito)"}
+                {restoreStatus.includes("A") || restoreStatus.includes("enviado") ? restoreStatus : "Restaurar Foto (Custa 1 Crédito)"}
               </Button>
 
               {/* Área de Feedback */}
