@@ -1,89 +1,76 @@
 "use client";
 
-import { useState, useEffect } from "react"; // Importamos o useEffect
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
 import { supabase } from "@/lib/supabaseClient";
-import { useUser } from "@clerk/nextjs";
 
-// Interface para o nosso Job (boa prática)
+// (REMOVEMOS A IMPORTAÇÃO DO CLERK)
+// import { useUser } from "@clerk/nextjs";
+
 interface Job {
   id: number;
   replicate_id: string;
   status: string;
   output_image_url: string | null;
-  // Adicione outros campos se necessário
 }
 
 export default function HomePage() {
-  const { user } = useUser();
+  // (REMOVEMOS O useUser())
+  // const { user } = useUser();
+  const userId = "public_user"; // Usar o mesmo ID público
 
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreStatus, setRestoreStatus] = useState<string>("");
   const [restoreResult, setRestoreResult] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
-
-  // O ID do pedido que estamos a "ouvir"
   const [listeningJobId, setListeningJobId] = useState<string | null>(null);
 
-  // PASSO 5 (A MAGIA): "Ouvir" o Supabase em Tempo Real
   useEffect(() => {
-    // Se não houver utilizador ou nenhum pedido para ouvir, não faz nada
-    if (!user || !listeningJobId) {
-      return;
-    }
+    if (!userId || !listeningJobId) return;
 
-    // O Supabase Realtime!
     const channel = supabase
-      .channel(`jobs-feed:${user.id}`) // Um canal único por utilizador
+      .channel(`jobs-feed:${userId}`) // Ouvir o canal público
       .on(
         'postgres_changes',
         { 
-          event: 'UPDATE', // Ouvir apenas por "UPDATEs"
+          event: 'UPDATE', 
           schema: 'public',
-          table: 'jobs', // Na nossa tabela 'jobs'
-          filter: `replicate_id=eq.${listeningJobId}` // E só para o *nosso* pedido
+          table: 'jobs',
+          filter: `replicate_id=eq.${listeningJobId}`
         },
         (payload) => {
-          // Quando o webhook atualiza o nosso job, isto é acionado!
           const updatedJob = payload.new as Job;
           if (updatedJob.status === 'completed') {
             setRestoreResult(updatedJob.output_image_url);
             setRestoreStatus("Foto restaurada com sucesso!");
-            setListeningJobId(null); // Parar de ouvir
-            channel.unsubscribe(); // Desligar o canal
+            setListeningJobId(null);
+            channel.unsubscribe();
           }
         }
       )
       .subscribe();
 
-    // Função de "limpeza"
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [listeningJobId, user]); // Correr este efeito sempre que o listeningJobId mudar
+  }, [listeningJobId, userId]);
 
-  // Função de Submissão (Agora Assíncrona)
   const handleRestoreSubmit = async () => {
     if (!restoreFile) {
       setRestoreError("Por favor, selecione um ficheiro.");
       return;
     }
-    if (!user) {
-      setRestoreError("Por favor, faça login para restaurar fotos.");
-      return;
-    }
+    // (REMOVEMOS A VERIFICAÇÃO DE LOGIN)
 
     setRestoreStatus("A carregar a foto...");
     setRestoreError(null);
     setRestoreResult(null);
 
     try {
-      // 1. Upload para o Supabase (igual a antes)
-      const fileName = `${user.id}/${new Date().toISOString()}`;
+      const fileName = `${userId}/${new Date().toISOString()}`; // Salvar na pasta "public_user"
       const { error: uploadError } = await supabase.storage
         .from("eternapic-images")
         .upload(fileName, restoreFile);
@@ -94,7 +81,6 @@ export default function HomePage() {
         .getPublicUrl(fileName);
       const imageUrl = publicUrlData.publicUrl;
 
-      // 2. Chamar a nossa API (agora devolve um job_id)
       setRestoreStatus("A registar o pedido de IA...");
 
       const response = await fetch("/api/restore", {
@@ -108,10 +94,8 @@ export default function HomePage() {
         throw new Error(errorData.error || "A restauração falhou.");
       }
 
-      const data = await response.json(); // Agora contém { job_id: "..." }
-
-      // 3. ATIVAR A "ESCUTA"
-      setListeningJobId(data.job_id); // Guardar o ID do pedido
+      const data = await response.json();
+      setListeningJobId(data.job_id);
       setRestoreStatus("Pedido enviado. A aguardar a IA... (Isto pode levar 1 min)");
 
     } catch (err: any) {
@@ -123,6 +107,7 @@ export default function HomePage() {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-50 p-4">
+      {/* (REMOVEMOS O CABEÇALHO DE LOGIN) */}
       <Tabs defaultValue="eternapic" className="w-full max-w-lg">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="eternapic">EternaPic (Fusão)</TabsTrigger>
@@ -162,10 +147,9 @@ export default function HomePage() {
                 onClick={handleRestoreSubmit}
                 disabled={restoreStatus.includes("A") || restoreStatus.includes("enviado")}
               >
-                {restoreStatus.includes("A") || restoreStatus.includes("enviado") ? restoreStatus : "Restaurar Foto (Custa 1 Crédito)"}
+                {restoreStatus.includes("A") || restoreStatus.includes("enviado") ? restoreStatus : "Restaurar Foto"}
               </Button>
 
-              {/* Área de Feedback */}
               {restoreError && (
                 <p className="text-red-500 text-sm text-center">{restoreError}</p>
               )}
