@@ -1,52 +1,34 @@
 import { NextResponse } from 'next/server';
 import Replicate from 'replicate';
-import { supabase } from '@/lib/supabaseClient';
 
-// (A IMPORTAÇÃO DO 'auth' FOI REMOVIDA)
-
+// Inicializa o cliente Replicate com a nossa chave de API
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN!,
 });
 
+// Esta é a função que é chamada quando o nosso frontend faz um "POST"
 export async function POST(request: Request) {
-  // (AUTENTICAÇÃO REMOVIDA TEMPORARIAMENTE PARA CORRIGIR O CRASH)
-  // const { userId } = await auth();
-  // if (!userId) { ... }
-
   try {
-    const { imageUrl } = await request.json();
+    // 1. Obter os dados do frontend (ex: a URL da imagem a restaurar)
+    const { imageUrl } = await request.json(); 
 
-    // Obter o URL de base do Vercel
-    const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
-    const webhookUrl = `${host}/api/webhook`;
-
+    // 2. Definir o modelo de IA que queremos usar no Replicate
+    // Este é um modelo popular para restaurar fotos (GFPGAN)
     const model = "tencentarc/gfpgan:9283608d2b2c1f11400e200f22f7a83d40A81463148f435f064c0C7b895318eE";
 
-    const prediction = await replicate.predictions.create({
-      model: model,
-      input: { img: imageUrl, scale: 2 },
-      webhook: webhookUrl,
-      webhook_events_filter: ["completed"]
+    // 3. Dar a ordem à IA
+    const output = await replicate.run(model, {
+      input: {
+        img: imageUrl, // A imagem que o utilizador enviou
+        scale: 2, // Aumentar a escala da imagem 2x
+      }
     });
 
-    // Vamos usar um user_id "publico" por agora
-    const userId = "public_user"; 
-
-    const { error: dbError } = await supabase
-      .from('jobs')
-      .insert({
-        user_id: userId, // Usar o ID público
-        replicate_id: prediction.id,
-        status: 'processing',
-        input_image_url: imageUrl,
-      });
-
-    if (dbError) console.error("Erro ao guardar o job:", dbError);
-
-    return NextResponse.json({ job_id: prediction.id }, { status: 201 }); // 201 = Criado
+    // 4. Devolver o resultado (a nova imagem) ao nosso frontend
+    return NextResponse.json({ restoredImageUrl: output }, { status: 200 });
 
   } catch (error) {
     console.error("Erro ao chamar o Replicate:", error);
-    return NextResponse.json({ error: "Erro ao iniciar a restauração" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao restaurar a imagem" }, { status: 500 });
   }
 }
