@@ -9,13 +9,17 @@ const replicate = new Replicate({
 });
 
 export async function POST(request: Request) {
-  // (AUTENTICAÇÃO REMOVIDA TEMPORARIAMENTE PARA CORRIGIR A BUILD/CRASH)
+  // (AUTENTICAÇÃO REMOVIDA TEMPORARIAMENTE PARA CORRIGIR O CRASH)
   // const { userId } = await auth();
   // if (!userId) { ... }
 
   try {
     const { imageUrl } = await request.json();
-    const webhookUrl = new URL('/api/webhook', process.env.VERCEL_URL || 'http://localhost:3000').toString();
+
+    // Obter o URL de base do Vercel
+    const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    const webhookUrl = `${host}/api/webhook`;
+
     const model = "tencentarc/gfpgan:9283608d2b2c1f11400e200f22f7a83d40A81463148f435f064c0C7b895318eE";
 
     const prediction = await replicate.predictions.create({
